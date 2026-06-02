@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "youtube-transcript": {
+      "command": "uv",
+      "args": ["run", "--python", "3.13", "${CLAUDE_PLUGIN_ROOT}/mcp/server.py"],
+      "cwd": "${CLAUDE_PROJECT_DIR}",
+      "env": {}
+    }
+  }
+}

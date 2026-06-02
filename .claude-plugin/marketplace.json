@@ -1,0 +1,16 @@
+{
+  "name": "inspire-marketplace",
+  "description": "One-repo marketplace distributing the `inspire` plugin. `/plugin marketplace add skqr/claude-inspire-plugin` then `/plugin install inspire@inspire-marketplace`.",
+  "owner": {
+    "name": "Javi Lorenzana"
+  },
+  "plugins": [
+    {
+      "name": "inspire",
+      "source": ".",
+      "description": "Mine a batch of YouTube videos for what the current project can learn and apply: a read-only, prompt-injection-aware subagent per video over a bundled transcript MCP, synthesized into docs/inspiration/.",
+      "license": "MIT",
+      "keywords": ["youtube", "transcript", "inspiration", "research"]
+    }
+  ]
+}

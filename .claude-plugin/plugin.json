@@ -1,0 +1,19 @@
+{
+  "name": "inspire",
+  "version": "0.1.0",
+  "description": "Drop YouTube URLs and fan out one read-only subagent per video — each pulls the transcript via a bundled MCP server and evaluates the video against the project you're working in (what to learn, what's directly applicable) — then synthesizes the findings into docs/inspiration/.",
+  "author": {
+    "name": "Javi Lorenzana"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/skqr/claude-inspire-plugin",
+  "keywords": [
+    "youtube",
+    "transcript",
+    "mcp",
+    "inspiration",
+    "research",
+    "subagents",
+    "prompt-injection-aware"
+  ]
+}
