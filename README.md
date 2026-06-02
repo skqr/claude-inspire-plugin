@@ -92,14 +92,14 @@ overlay without installing anything globally:
 
 ```sh
 # run the server (stdio); PEP 723 deps are provisioned automatically
-uv run mcp/server.py
+uv run inspire/mcp/server.py
 
 # typecheck — the script's runtime deps must be in the overlay alongside mypy
 uv run --with mypy --with mcp --with youtube-transcript-api --with python-dotenv \
-  mypy --strict mcp/server.py
+  mypy --strict inspire/mcp/server.py
 
-# lint + format (uses the repo's ruff.toml: py313, line-length 100)
-uvx ruff check mcp/ && uvx ruff format --check mcp/
+# lint + format (uses inspire/ruff.toml: py313, line-length 100)
+uvx ruff check inspire/mcp/ && uvx ruff format --check inspire/mcp/
 ```
 
 ## License

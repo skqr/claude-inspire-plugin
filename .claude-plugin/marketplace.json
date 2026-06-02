@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "inspire",
-      "source": ".",
+      "source": "./inspire",
       "description": "Mine a batch of YouTube videos for what the current project can learn and apply: a read-only, prompt-injection-aware subagent per video over a bundled transcript MCP, synthesized into docs/inspiration/.",
       "license": "MIT",
       "keywords": ["youtube", "transcript", "inspiration", "research"]
