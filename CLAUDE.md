@@ -84,7 +84,13 @@ sh -n inspire/hooks/check_deps.sh
 
 The `PreToolUse` hooks read a JSON payload on stdin and print a deny decision (or exit 0). Exercise the guard by hand: `echo '{"tool_input":{"file_path":"/tmp/x"}}' | CLAUDE_PROJECT_DIR=/tmp python3 inspire/hooks/guard_docs_write.py` (allows unless a fresh `.inspire-apply.lock` marker exists in the project dir). See `docs/tech/hooks-and-config.md` for more.
 
-There are no tests. `youtube-transcript-api` (`>=1.0,<2`) and `trafilatura` (`>=1.8,<3`) are both pinned below their next major; keep the pins so an upgrade can't silently cross a breaking-change boundary. The code targets `youtube-transcript-api`'s 1.x instance API (`YouTubeTranscriptApi().fetch`).
+Tests live in `tests/` — offline, no network (no real YouTube/web fetches). They cover the enforcement logic: video-id parsing, the SSRF guard, the path-bounded `write_doc`, and the two `PreToolUse` hooks (run as subprocesses, as Claude Code invokes them):
+
+```sh
+uv run --with pytest --with mcp --with python-dotenv pytest -q
+```
+
+All of the above (ruff, mypy, shell/JSON sanity, pytest) runs in CI on push/PR via `.github/workflows/ci.yml`. `youtube-transcript-api` (`>=1.0,<2`) and `trafilatura` (`>=1.8,<3`) are both pinned below their next major; keep the pins so an upgrade can't silently cross a breaking-change boundary. The code targets `youtube-transcript-api`'s 1.x instance API (`YouTubeTranscriptApi().fetch`).
 
 ## Configuration
 

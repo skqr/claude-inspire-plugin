@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Lint + format (ruff)
+        run: |
+          uvx ruff check inspire/mcp/ inspire/hooks/
+          uvx ruff format --check inspire/mcp/ inspire/hooks/
+
+      - name: Typecheck (mypy --strict)
+        run: |
+          uv run --python 3.13 --with mypy --with mcp --with youtube-transcript-api \
+            --with trafilatura --with python-dotenv \
+            mypy --strict inspire/mcp/server.py
+          uv run --python 3.13 --with mypy --with mcp --with python-dotenv \
+            mypy --strict inspire/mcp/docs_server.py
+          uv run --python 3.13 --with mypy \
+            mypy --strict inspire/hooks/guard_docs_write.py inspire/hooks/web_fetch_policy.py
+
+      - name: Shell + JSON sanity
+        run: |
+          sh -n inspire/hooks/check_deps.sh
+          python3 -c "import json; [json.load(open(p)) for p in ['inspire/.mcp.json', 'inspire/hooks/hooks.json', 'inspire/.claude-plugin/plugin.json', '.claude-plugin/marketplace.json']]; print('json ok')"
+
+      - name: Tests (pytest)
+        run: |
+          uv run --python 3.13 --with pytest --with mcp --with python-dotenv pytest -q

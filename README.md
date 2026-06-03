@@ -183,10 +183,15 @@ uv run --with mypy mypy --strict inspire/hooks/guard_docs_write.py inspire/hooks
 
 # lint + format (uses inspire/ruff.toml: py313, line-length 100)
 uvx ruff check inspire/mcp/ inspire/hooks/ && uvx ruff format --check inspire/mcp/ inspire/hooks/
+
+# tests (offline; under tests/)
+uv run --with pytest --with mcp --with python-dotenv pytest -q
 ```
 
-Design rationale lives in [`docs/decisions/`](docs/decisions/) (ADRs); a how-it-works
-walkthrough is in [`docs/tech/`](docs/tech/).
+All of these run in CI on every push and pull request
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Design rationale lives in
+[`docs/decisions/`](docs/decisions/) (ADRs); a how-it-works walkthrough is in
+[`docs/tech/`](docs/tech/).
 
 ## License
 
