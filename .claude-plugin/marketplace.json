@@ -8,9 +8,9 @@
     {
       "name": "inspire",
       "source": "./inspire",
-      "description": "Mine a batch of YouTube videos for what the current project can learn and apply: a read-only, prompt-injection-aware subagent per video over a bundled transcript MCP, synthesized into docs/inspiration/.",
+      "description": "Mine a batch of links — YouTube videos and web articles — for what the current project can learn and apply: a read-only, prompt-injection-aware subagent per link over a bundled content MCP, synthesized into docs/inspiration/; then /apply promotes the vetted leads into the project's own docs, write-confined by a guard hook.",
       "license": "MIT",
-      "keywords": ["youtube", "transcript", "inspiration", "research"]
+      "keywords": ["youtube", "transcript", "web", "article", "inspiration", "research", "hooks"]
     }
   ]
 }

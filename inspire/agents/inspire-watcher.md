@@ -1,7 +1,7 @@
 ---
 name: inspire-watcher
-description: Watches a single YouTube video for the /inspire skill — pulls its transcript via the bundled youtube-transcript MCP and evaluates the video against the project it's running in (what it's about, what we can learn, what's directly applicable). Read-only and no-egress by design: it reads untrusted third-party transcript text, so it has no shell, cannot write or edit files, and cannot reach the network beyond the transcript tool.
-tools: mcp__youtube-transcript__get_youtube_transcript, Read, Grep, Glob
+description: Watches a single YouTube video for the /inspire skill — pulls its transcript via the bundled inspire-content MCP and evaluates the video against the project it's running in (what it's about, what we can learn, what's directly applicable). Read-only and no-egress by design: it reads untrusted third-party transcript text, so it has no shell, cannot write or edit files, and cannot reach the network beyond the transcript tool.
+tools: mcp__inspire-content__get_youtube_transcript, Read, Grep, Glob
 model: inherit
 ---
 

@@ -1,8 +1,14 @@
 {
   "mcpServers": {
-    "youtube-transcript": {
+    "inspire-content": {
       "command": "uv",
       "args": ["run", "--python", "3.13", "${CLAUDE_PLUGIN_ROOT}/mcp/server.py"],
+      "cwd": "${CLAUDE_PROJECT_DIR}",
+      "env": {}
+    },
+    "inspire-docs": {
+      "command": "uv",
+      "args": ["run", "--python", "3.13", "${CLAUDE_PLUGIN_ROOT}/mcp/docs_server.py"],
       "cwd": "${CLAUDE_PROJECT_DIR}",
       "env": {}
     }
