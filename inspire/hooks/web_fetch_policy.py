@@ -14,7 +14,10 @@ a subdomain of it (suffix on a dot boundary): "example.com" matches "example.com
 and "docs.example.com", but not "notexample.com". With neither var set, all
 fetches are allowed (no policy). See docs/decisions/0005-operational-hooks.md.
 
-Wired (hooks/hooks.json) to the tool name mcp__inspire-content__get_webpage_content.
+Wired (hooks/hooks.json) to the get_webpage_content tool. The matcher there is a
+regex covering every name form Claude Code registers the plugin tool under
+(`mcp__plugin_inspire_inspire-content__…`, `mcp__inspire__…`, and the bare name) —
+matching only the bare name would let the policy silently never fire.
 Reads the PreToolUse payload on stdin; exits 0 to allow, or prints a deny decision.
 """
 

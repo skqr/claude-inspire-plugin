@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -192,3 +193,74 @@ def test_guard_allows_docs_with_marker(tmp_path: Path) -> None:
 )
 def test_web_fetch_policy(env: dict, url: str, denied: bool) -> None:
     assert _run_hook("web_fetch_policy.py", {"tool_input": {"url": url}}, env) is denied
+
+
+# --------------------------------------------------------------------------- #
+# tool-name wiring — agent allowlists + the web-fetch matcher must track the
+# names Claude Code actually registers plugin MCP tools under. The runtime
+# namespaces them `mcp__plugin_<plugin>_<server>__<tool>`; bundling the bare
+# `mcp__<server>__<tool>` (what the docs read like) silently grants nothing, so
+# the watcher loses its only fetch tool. These names have drifted across Claude
+# Code versions, so each agent lists every known form of its ONE tool — all
+# aliases of the same capability, so privilege stays least. Guard against an
+# edit "simplifying" back to a single form and rebreaking a real install.
+# --------------------------------------------------------------------------- #
+AGENTS = REPO / "inspire" / "agents"
+
+_TRANSCRIPT_NAMES = [
+    "mcp__plugin_inspire_inspire-content__get_youtube_transcript",
+    "mcp__inspire__inspire-content__get_youtube_transcript",
+    "mcp__inspire-content__get_youtube_transcript",
+]
+_WEBPAGE_NAMES = [
+    "mcp__plugin_inspire_inspire-content__get_webpage_content",
+    "mcp__inspire__inspire-content__get_webpage_content",
+    "mcp__inspire-content__get_webpage_content",
+]
+_WRITE_NAMES = [
+    "mcp__plugin_inspire_inspire-docs__write_doc",
+    "mcp__inspire__inspire-docs__write_doc",
+    "mcp__inspire-docs__write_doc",
+]
+
+
+def _agent_tools_line(agent: str) -> str:
+    for line in (AGENTS / f"{agent}.md").read_text().splitlines():
+        if line.startswith("tools:"):
+            return line
+    raise AssertionError(f"{agent}.md has no tools: line")
+
+
+@pytest.mark.parametrize(
+    "agent,names",
+    [
+        ("inspire-watcher", _TRANSCRIPT_NAMES),
+        ("inspire-reader", _WEBPAGE_NAMES),
+        ("inspire-applier", _WRITE_NAMES),
+    ],
+)
+def test_agent_allowlist_covers_every_name_form(agent: str, names: list[str]) -> None:
+    tools = _agent_tools_line(agent)
+    for name in names:
+        assert name in tools, f"{agent} allowlist missing {name}"
+
+
+def _webfetch_matcher() -> str:
+    cfg = json.loads((HOOKS / "hooks.json").read_text())
+    for entry in cfg["hooks"]["PreToolUse"]:
+        if "web_fetch_policy.py" in entry["hooks"][0]["command"]:
+            return entry["matcher"]
+    raise AssertionError("no web_fetch_policy.py PreToolUse entry in hooks.json")
+
+
+def test_web_fetch_matcher_covers_every_webpage_name() -> None:
+    rx = re.compile(_webfetch_matcher())
+    for name in _WEBPAGE_NAMES:
+        assert rx.search(name), f"web-fetch matcher misses {name}"
+
+
+def test_web_fetch_matcher_ignores_transcript_tool() -> None:
+    # The policy is webpage-only; it must not gate the transcript tool.
+    rx = re.compile(_webfetch_matcher())
+    for name in _TRANSCRIPT_NAMES:
+        assert not rx.search(name), f"web-fetch matcher wrongly fires on {name}"

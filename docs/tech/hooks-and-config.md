@@ -37,12 +37,19 @@ exits 0 — it never restricts the host project's ordinary editing. A marker old
 one hour is treated as stale and ignored (so an aborted run can't lock a repo). Needs
 `python3` on `PATH`; absent that, it fails open.
 
-### 2. `web_fetch_policy.py` — `PreToolUse` on `mcp__inspire-content__get_webpage_content`
+### 2. `web_fetch_policy.py` — `PreToolUse` on `get_webpage_content`
 
 A **name-based domain policy** layered on the fetcher's IP-level SSRF guard. Reads
 `INSPIRE_WEB_ALLOWLIST` / `INSPIRE_WEB_DENYLIST` (above); with neither set it's a
 no-op. Allowlist mode denies anything not matched (including an unparseable host);
 denylist mode denies only matches. Fails open on a missing `python3`.
+
+The `hooks.json` matcher is a regex —
+`mcp__(plugin_inspire_|inspire__)?inspire-content__get_webpage_content` — because
+Claude Code registers a plugin's MCP tools under a **namespaced** name
+(`mcp__plugin_inspire_inspire-content__…` in current versions, `mcp__inspire__…`
+in older ones), not the bare `mcp__inspire-content__…`. Matching only the bare
+name would leave the policy silently inert.
 
 ### 3. `check_deps.sh` — `SessionStart`
 
