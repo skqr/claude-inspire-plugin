@@ -1,6 +1,6 @@
 {
   "name": "inspire",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Two-stage learning loop: /inspire drops YouTube and web-article URLs and fans out one read-only subagent per link — each pulls the content (transcript or page text) via a bundled MCP server and evaluates it against the project you're working in — synthesized into docs/inspiration/; then /apply promotes the vetted leads into your project's own docs, confined to the docs dir by a guard hook.",
   "author": {
     "name": "Javi Lorenzana"

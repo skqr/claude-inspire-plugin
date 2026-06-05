@@ -11,7 +11,7 @@
         ]
       },
       {
-        "matcher": "mcp__inspire-content__get_webpage_content",
+        "matcher": "mcp__(plugin_inspire_|inspire__)?inspire-content__get_webpage_content",
         "hooks": [
           {
             "type": "command",

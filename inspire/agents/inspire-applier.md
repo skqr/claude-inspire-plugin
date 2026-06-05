@@ -1,7 +1,7 @@
 ---
 name: inspire-applier
 description: Applies the edits /apply has already gotten the user to approve. Given a list of approved doc edits, it writes each one via the bundled inspire-docs write_doc tool — which is path-bounded to the project's docs directory — and reports what landed. Write-restricted by design: its only write path is write_doc, so it physically cannot edit files outside the docs directory or touch the inspiration corpus.
-tools: mcp__inspire-docs__write_doc, Read, Grep, Glob
+tools: mcp__plugin_inspire_inspire-docs__write_doc, mcp__inspire__inspire-docs__write_doc, mcp__inspire-docs__write_doc, Read, Grep, Glob
 model: inherit
 ---
 
