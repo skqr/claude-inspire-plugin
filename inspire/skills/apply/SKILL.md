@@ -55,13 +55,18 @@ is bounded two ways, primary and backstop:
    (Releasing it is the final step. If a run aborts and the marker is left behind,
    it auto-expires after an hour — but clean it up anyway when you can.)
 
-1. **Scope the run.** If the user named a specific inspiration note or theme, act
-   on that. Otherwise read `docs/inspiration/README.md` — its **Cross-cutting
-   themes** section is the prioritized worklist — and the per-source notes it links.
-   Default to the highest-relevance, not-yet-actioned leads; ignore anything a note
-   marks "skip" or "already done here." Value over volume: a confirmatory source that
-   changes no doc gets *no* proposed edit, and you say so. If `docs/inspiration/` is
-   empty or absent, tell the user to run `/inspire <urls>` first, and stop.
+1. **Scope the run — honor the reconciliation flags first.** Read each note's
+   `status` frontmatter and work **only** notes whose `status` is `open` (a missing
+   `status` counts as `open`). Skip `promoted`, `already-in-canon`, and `wont-do`
+   outright — those are settled, and re-grounding them is exactly the churn this flag
+   exists to kill (ADR 0006). State how many you skipped, so the skip is visible, not
+   silent. An explicit user request for a named note or theme overrides its flag — act
+   on it regardless. Among the `open` notes, read `docs/inspiration/README.md` — its
+   **Cross-cutting themes** section is the prioritized worklist — and the notes it
+   links; default to the highest-relevance leads. Value over volume: a confirmatory
+   source that changes no doc gets *no* proposed edit, and you say so. If
+   `docs/inspiration/` is empty or absent — or every note is already settled — tell the
+   user (run `/inspire <urls>` first if it's empty), and stop.
 
 2. **Learn this project's doc conventions before proposing.** You're editing
    someone's canon, so first understand it: where docs live, how they're structured,
@@ -110,10 +115,19 @@ is bounded two ways, primary and backstop:
    Before any deletion or other irreversible change, warn with the consequences and
    wait for a clear yes. Don't commit or push — leave the working tree for the user.
 
-7. **Report what landed, and release the guard.** A tight summary: which files
-   changed and how, which leads you deliberately did *not* act on (and why), and any
-   follow-ups you're holding for a dedicated pass. If you touched a file whose state
-   contradicted its lead, say so. Then remove the activation marker:
+7. **Report what landed, suggest the `status` flips, and release the guard.** A tight
+   summary: which files changed and how, which leads you deliberately did *not* act on
+   (and why), and any follow-ups you're holding for a dedicated pass. If you touched a
+   file whose state contradicted its lead, say so.
+
+   Then — because you cannot write the corpus yourself — **tell the user the exact
+   `status` flips to make**, one line per note you settled this run: the note and its
+   new disposition (`promoted` for a lead you landed, `already-in-canon` for one the
+   project already held, `wont-do` for one ruled out of scope), e.g.
+   `why-agents-need-decision-traces-neo4j.md → already-in-canon`. That hands
+   reconciliation back to the corpus owner in a form they can apply in seconds, and
+   it's what stops the next run from re-deriving the same conclusions (ADR 0006). Then
+   remove the activation marker:
 
    ```sh
    rm -f "${CLAUDE_PROJECT_DIR:-$PWD}/.inspire-apply.lock"

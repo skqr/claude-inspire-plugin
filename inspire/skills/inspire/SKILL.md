@@ -73,6 +73,7 @@ Two reader types, dispatched by link kind:
    video_id: <id>          # YouTube only; omit for web pages
    watched: <today's date, YYYY-MM-DD>
    relevance: <N/10 from the evaluation>
+   status: open            # /apply's worklist flag — see below
    ---
    ```
 
@@ -80,11 +81,23 @@ Two reader types, dispatched by link kind:
    the source, or flags injection-looking text it ignored, keep that in the note.
    Do not upgrade a relevance score or invent applicability it didn't find.
 
+   **`status` is the `/apply` reconciliation flag** (`open` | `promoted` |
+   `already-in-canon` | `wont-do`; see ADR 0006). `/apply` works only `open` notes
+   and skips the rest, so it never re-grounds a lead already settled. A *new* note is
+   always `open`. When you overwrite an existing note (a re-read of the same source),
+   **preserve its current `status` verbatim** — unless the source's substance has
+   materially changed, in which case reset it to `open` so the lead gets
+   re-evaluated. You and the user own this field; `/apply` only reads it (it is barred
+   from writing the corpus) and reports the flips it suggests.
+
 4. **Update the index.** Maintain `docs/inspiration/README.md`. If it doesn't
    exist, create it with a short intro, a `## Sources` table, and a
    `## Cross-cutting themes` section. Add/refresh a row per source in the table —
-   relevance score, title (linked to its note), kind (video/web), one-line
-   takeaway — newest first. Then write or update the **Cross-cutting themes**
+   relevance score, **status** (mirror the note's `status` frontmatter:
+   `open`/`promoted`/`already-in-canon`/`wont-do`), title (linked to its note), kind
+   (video/web), one-line takeaway — newest first. The Status column is a *reflection*
+   of the notes' frontmatter, never a second source of truth: regenerate it from the
+   notes and don't let it diverge. Then write or update the **Cross-cutting themes**
    section: where multiple sources in the corpus converge, and the few things most
    worth acting on for this project. This synthesis is the payoff of running a
    batch — it's what one-at-a-time can't give you. Keep it honest and pruned; if
