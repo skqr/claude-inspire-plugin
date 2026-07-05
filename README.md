@@ -10,24 +10,29 @@ docs.
 It works in two stages. **Intake** (`/inspire`):
 
 - **A skill, `/inspire`** — the orchestrator. Collects the URLs you drop, routes
-  each to the right reader, fans them out, then writes the notes + a synthesized
+  each to the right reader, fans them out, then composes the notes + a synthesized
   index.
-- **Two subagents** — `inspire-watcher` evaluates one YouTube video,
+- **Two reader subagents** — `inspire-watcher` evaluates one YouTube video,
   `inspire-reader` evaluates one web page. Both are read-only and minimal-egress
   by design (see _Security_); each returns a finished evaluation in the same shape.
+- **A writer subagent, `inspire-scribe`** — writes the composed notes and index
+  through `write_note`, a tool path-bounded to `docs/inspiration/`. That makes
+  "/inspire only writes the corpus" a structural fact, not a promise (see
+  _Security_).
 - **An MCP server, `inspire-content`** — a thin, pure-read content fetcher the
-  subagents call. Two tools (`get_youtube_transcript`, `get_webpage_content`) in a
-  self-contained single Python file with
+  reader subagents call. Two tools (`get_youtube_transcript`, `get_webpage_content`)
+  in a self-contained single Python file with
   [PEP 723](https://peps.python.org/pep-0723/) inline dependencies.
 
 **Promotion** (`/apply`):
 
 - **A skill, `/apply`** — the editor. Reads the vetted corpus and proposes a
   doc-by-doc edit brief, then applies only what you approve, per edit.
-- **A subagent, `inspire-applier`**, and a second MCP server, `inspire-docs` — the
-  applier executes approved edits through the server's one tool, `write_doc`, which
-  is path-bounded to your docs directory. That makes "only edits project docs" a
-  structural fact, not a promise (see _Security_).
+- **A subagent, `inspire-applier`** — executes approved edits through `write_doc`,
+  which is path-bounded to your docs directory and refuses the inspiration corpus —
+  the exact complement of `write_note` (see _Security_).
+
+Both bounded write tools live on a second MCP server, `inspire-docs`.
 
 ## Requirements
 
@@ -78,9 +83,12 @@ plugin is built around that:
 1. **Least-privilege readers.** Each reader is allowlisted to exactly one content
    tool plus read-only repo access (`Read`/`Grep`/`Glob`). No Bash, no Write/Edit,
    no general web. A successful injection has no shell to run and no file to mutate.
-2. **The orchestrator writes files, not the exposed agent.** Readers *return*
-   their evaluation as text; the `/inspire` skill writes `docs/inspiration/`. The
-   write capability never sits in a context that has ingested raw fetched content.
+2. **The exposed agents never write, and nothing writes unbounded.** Readers
+   *return* their evaluation as text; the `/inspire` skill composes the notes and
+   dispatches `inspire-scribe`, whose only write tool (`write_note`) is
+   path-bounded to `docs/inspiration/`. No write capability sits in a context that
+   has ingested raw fetched content — and since the evaluations themselves derive
+   from that content, even the writing they feed is confined to the corpus.
 3. **Data-not-instructions framing.** Content is delivered inside fences with a
    standing instruction to treat it as data; injection-looking text is reported,
    never obeyed.
@@ -107,41 +115,45 @@ restrict fetches by **domain** with `INSPIRE_WEB_ALLOWLIST` / `INSPIRE_WEB_DENYL
 > implemented in some Claude Code versions (a subagent may inherit MCP tools from
 > the host). The no-Bash / no-Write / no-general-web guarantee in (1) holds
 > regardless — those are ordinary tools the allowlist does restrict — so the worst
-> case is a reader seeing *other read MCP tools* you have configured.
+> case is a reader seeing other MCP tools you have configured (including this
+> plugin's two path-bounded write tools — still confined to the docs tree).
 
 ### The `/apply` stage — different risk, different control
 
-`/apply` is the write-capable stage, and it's a **separate skill on purpose**: it
-reads only *already-vetted* internal notes plus your own files — never untrusted
-third-party content — so its risk isn't injection, it's **over-reach** (editing
-more, or more broadly, than a lead justifies). Its write boundary is enforced in two
-layers:
+`/apply` reads only *already-vetted* internal notes plus your own files — never
+untrusted third-party content — so its risk isn't injection, it's **over-reach**
+(editing more, or more broadly, than a lead justifies). It's a **separate skill on
+purpose**, and both stages' write boundaries are enforced the same two-layer,
+mirror-image way:
 
-1. **Primary (hard) — a bounded write tool.** `/apply` never writes directly; it
-   dispatches the `inspire-applier` subagent, whose *only* write tool is `write_doc`
-   (on the `inspire-docs` server). `write_doc` writes **only** inside your docs
-   directory (`INSPIRE_DOCS_DIR_PATH`, default `./docs`) and **refuses the
-   inspiration corpus** — unconditionally, in trusted code, with traversal/symlink
-   escapes resolved away. The applier has no general `Write`/`Edit`/`Bash`, so it
-   *structurally cannot* write out of bounds.
+1. **Primary (hard) — a bounded write tool.** Neither skill writes directly; each
+   dispatches its writer subagent, which has no general `Write`/`Edit`/`Bash` and
+   exactly one write tool on the `inspire-docs` server. `/apply` → `inspire-applier`
+   → `write_doc`, which writes **only** inside your docs directory
+   (`INSPIRE_DOCS_DIR_PATH`, default `./docs`) and **refuses the inspiration
+   corpus**; `/inspire` → `inspire-scribe` → `write_note`, which writes **only**
+   inside that corpus. Both checks run unconditionally, in trusted code, with
+   traversal/symlink escapes resolved away — each writer *structurally cannot*
+   write out of bounds.
 2. **Backstop (soft) — a guard hook.** A `PreToolUse` hook catches any stray raw
-   `Write`/`Edit` in the main thread while `/apply` runs.
-3. **Propose-first, per-edit approval.** It presents an edit brief and stops; you
-   accept, amend, or reject each edit. It won't commit or push.
+   `Write`/`Edit` in the main thread while either skill runs, enforcing that
+   skill's scope.
+3. **Propose-first, per-edit approval (`/apply` only).** It presents an edit brief
+   and stops; you accept, amend, or reject each edit. It won't commit or push.
 
 Two honest limits, by design rather than oversight: Claude Code hooks are **global
-to the session** with no "active skill" signal, so the *backstop* self-gates on a
-marker file and fails *open* if it isn't set — fine for a net under a hard primary.
+to the session** with no "active skill" signal, so the *backstop* self-gates on
+marker files and fails *open* if one isn't set — fine for a net under a hard primary.
 And the default `./docs` boundary excludes root-level docs like `README.md`; widening
 it is a deliberate `INSPIRE_DOCS_DIR_PATH` change, never something `/apply` does on
-its own. The bounded `write_doc` is the layer you actually rely on.
+its own. The bounded `write_doc`/`write_note` pair is the layer you actually rely on.
 
 ## Configuration
 
 | Env var (in the host project's `.env`) | Default | Meaning |
 | --- | --- | --- |
 | `INSPIRE_CONTENT_MAX_CHARS` | `200000` | Max characters returned for any source (transcript or web page; ~3.5h of speech / a very long article). Longer content is truncated and the tool's header says exactly how much was dropped. Set to `0` to disable the cap. Takes effect on MCP server restart. |
-| `INSPIRE_DOCS_DIR_PATH` | `./docs` | Directory `/apply` is allowed to write to, enforced by both `write_doc` (hard) and the guard hook (soft); the inspiration corpus (`<docs>/inspiration/`) is excluded. Set it to where your docs live, or to `.` to allow the whole repo (e.g. to edit a root `README.md`). Read per-call — no restart needed. |
+| `INSPIRE_DOCS_DIR_PATH` | `./docs` | Docs root both write bounds derive from: `/apply` may write inside it minus the corpus (`<docs>/inspiration/`), `/inspire` only inside the corpus — each enforced by its bounded tool (hard) and the guard hook (soft). Set it to where your docs live, or to `.` to allow `/apply` the whole repo (e.g. to edit a root `README.md`). Read per-call — no restart needed. |
 | `INSPIRE_WEB_ALLOWLIST` | _(unset)_ | Comma-separated host patterns; if set, the web fetcher may fetch **only** these (a pattern matches a host equal to it or a subdomain). Layered on the SSRF guard. |
 | `INSPIRE_WEB_DENYLIST` | _(unset)_ | Comma-separated host patterns the web fetcher refuses. Allowlist wins if both are set; with neither set there's no domain policy. |
 

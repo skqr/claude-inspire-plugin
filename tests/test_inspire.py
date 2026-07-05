@@ -1,8 +1,9 @@
 """Offline tests for the inspire plugin's enforcement logic.
 
 Covers the pure, security-relevant pieces — no network, no real YouTube/web
-fetches: video-id parsing, the SSRF guard, the path-bounded `write_doc` tool, and
-the two PreToolUse hooks (run as subprocesses, exactly as Claude Code invokes them).
+fetches: video-id parsing, the SSRF guard, the path-bounded `write_doc` and
+`write_note` tools, and the two PreToolUse hooks (run as subprocesses, exactly as
+Claude Code invokes them).
 
 Run with:
     uv run --with pytest --with mcp --with python-dotenv pytest -q
@@ -125,6 +126,36 @@ def test_write_doc_custom_docs_dir(project: Path, monkeypatch: pytest.MonkeyPatc
 
 
 # --------------------------------------------------------------------------- #
+# write_note (inspire-docs server) — the exact complement of write_doc
+# --------------------------------------------------------------------------- #
+def test_write_note_inside_corpus(project: Path) -> None:
+    assert docs.write_note("docs/inspiration/note.md", "# N\n").startswith("OK:")
+    assert (project / "docs" / "inspiration" / "note.md").read_text() == "# N\n"
+
+
+def test_write_note_refuses_docs_outside_corpus(project: Path) -> None:
+    assert docs.write_note("docs/guide.md", "x").startswith("REFUSED:")
+    assert not (project / "docs" / "guide.md").exists()
+
+
+def test_write_note_refuses_outside_docs(project: Path) -> None:
+    assert docs.write_note("src/app.py", "x").startswith("REFUSED:")
+    assert not (project / "src").exists()
+
+
+def test_write_note_refuses_traversal(project: Path) -> None:
+    assert docs.write_note("docs/inspiration/../guide.md", "x").startswith("REFUSED:")
+    assert not (project / "docs" / "guide.md").exists()
+
+
+def test_write_note_custom_docs_dir(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("INSPIRE_DOCS_DIR_PATH", ".")
+    assert docs.write_note("inspiration/n.md", "# N\n").startswith("OK:")
+    assert (project / "inspiration" / "n.md").read_text() == "# N\n"
+    assert docs.write_note("docs/x.md", "x").startswith("REFUSED:")
+
+
+# --------------------------------------------------------------------------- #
 # hooks (subprocess, exactly as Claude Code runs them)
 # --------------------------------------------------------------------------- #
 def _run_hook(script: str, payload: dict, env: dict) -> bool:
@@ -181,6 +212,48 @@ def test_guard_allows_docs_with_marker(tmp_path: Path) -> None:
     )
 
 
+def test_guard_intake_allows_corpus(tmp_path: Path) -> None:
+    (tmp_path / "docs/inspiration").mkdir(parents=True)
+    (tmp_path / ".inspire-intake.lock").touch()
+    assert not _run_hook(
+        "guard_docs_write.py", _write_payload(tmp_path / "docs/inspiration/n.md"),
+        {"CLAUDE_PROJECT_DIR": str(tmp_path)},
+    )
+
+
+def test_guard_intake_blocks_docs_outside_corpus(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / ".inspire-intake.lock").touch()
+    assert _run_hook(
+        "guard_docs_write.py", _write_payload(tmp_path / "docs/g.md"),
+        {"CLAUDE_PROJECT_DIR": str(tmp_path)},
+    )
+
+
+def test_guard_intake_blocks_outside_docs(tmp_path: Path) -> None:
+    (tmp_path / ".inspire-intake.lock").touch()
+    assert _run_hook(
+        "guard_docs_write.py", _write_payload(tmp_path / "src/x.py"),
+        {"CLAUDE_PROJECT_DIR": str(tmp_path)},
+    )
+
+
+def test_guard_freshest_marker_wins(tmp_path: Path) -> None:
+    # A stray apply marker from an aborted run must not mask a live intake run.
+    (tmp_path / "docs/inspiration").mkdir(parents=True)
+    apply_marker = tmp_path / ".inspire-apply.lock"
+    apply_marker.touch()
+    older = apply_marker.stat().st_mtime - 60
+    os.utime(apply_marker, (older, older))
+    (tmp_path / ".inspire-intake.lock").touch()
+    env = {"CLAUDE_PROJECT_DIR": str(tmp_path)}
+    # Intake rules apply: corpus writes pass, plain docs writes are denied.
+    assert not _run_hook(
+        "guard_docs_write.py", _write_payload(tmp_path / "docs/inspiration/n.md"), env,
+    )
+    assert _run_hook("guard_docs_write.py", _write_payload(tmp_path / "docs/g.md"), env)
+
+
 @pytest.mark.parametrize(
     "env,url,denied",
     [
@@ -222,6 +295,11 @@ _WRITE_NAMES = [
     "mcp__inspire__inspire-docs__write_doc",
     "mcp__inspire-docs__write_doc",
 ]
+_NOTE_NAMES = [
+    "mcp__plugin_inspire_inspire-docs__write_note",
+    "mcp__inspire__inspire-docs__write_note",
+    "mcp__inspire-docs__write_note",
+]
 
 
 def _agent_tools_line(agent: str) -> str:
@@ -237,12 +315,21 @@ def _agent_tools_line(agent: str) -> str:
         ("inspire-watcher", _TRANSCRIPT_NAMES),
         ("inspire-reader", _WEBPAGE_NAMES),
         ("inspire-applier", _WRITE_NAMES),
+        ("inspire-scribe", _NOTE_NAMES),
     ],
 )
 def test_agent_allowlist_covers_every_name_form(agent: str, names: list[str]) -> None:
     tools = _agent_tools_line(agent)
     for name in names:
         assert name in tools, f"{agent} allowlist missing {name}"
+
+
+def test_write_agents_do_not_cross_tools() -> None:
+    # The two write bounds are complementary; granting an agent the other stage's
+    # tool would collapse them (the applier could write the corpus, the scribe
+    # could write project docs).
+    assert "write_note" not in _agent_tools_line("inspire-applier")
+    assert "write_doc" not in _agent_tools_line("inspire-scribe")
 
 
 def _webfetch_matcher() -> str:

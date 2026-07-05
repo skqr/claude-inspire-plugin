@@ -8,7 +8,7 @@ the session). None are required; each has a safe default.
 | Variable | Default | Read by | Effect |
 | --- | --- | --- | --- |
 | `INSPIRE_CONTENT_MAX_CHARS` | `200000` | `inspire-content` server | Caps characters returned by **both** content tools. `0`/negative disables the cap. Takes effect on MCP server restart. |
-| `INSPIRE_DOCS_DIR_PATH` | `./docs` | `write_doc`, guard hook | Directory `/apply` may write to. Resolved relative to the project root. Read per-call (no restart). Set to `.` to allow the whole repo (e.g. to edit a root `README.md`). |
+| `INSPIRE_DOCS_DIR_PATH` | `./docs` | `write_doc`, `write_note`, guard hook | Docs root both write bounds derive from: `/apply` may write inside it (minus `<docs>/inspiration/`); `/inspire` may write only `<docs>/inspiration/`. Resolved relative to the project root. Read per-call (no restart). Set to `.` to allow `/apply` the whole repo (e.g. to edit a root `README.md`). |
 | `INSPIRE_WEB_ALLOWLIST` | _(unset)_ | web-fetch policy hook | Comma-separated host patterns; if set, **only** these may be fetched. |
 | `INSPIRE_WEB_DENYLIST` | _(unset)_ | web-fetch policy hook | Comma-separated host patterns to block. Allowlist wins if both are set. |
 
@@ -23,13 +23,16 @@ resolve regardless of where the plugin is installed.
 
 ### 1. `guard_docs_write.py` — `PreToolUse` on `Write|Edit|MultiEdit|NotebookEdit`
 
-The **backstop** for `/apply`'s write boundary (the hard primary is `write_doc` +
-`inspire-applier`; see [security.md](security.md)). Denies a write when **all** hold:
+The **backstop** for both stages' write boundaries (each hard primary is a
+path-bounded MCP tool behind a restricted subagent; see [security.md](security.md)).
+Which scope it enforces depends on which marker file is fresh at the project root
+(the skills create them at the start of a run and remove them at the end; if both
+are somehow present, the freshest wins):
 
-- a fresh marker file `.inspire-apply.lock` exists at the project root (i.e. `/apply`
-  is active), **and**
-- the resolved target is outside `INSPIRE_DOCS_DIR_PATH`, **or** inside the corpus
-  `<docs>/inspiration/`.
+- `.inspire-apply.lock` (`/apply` active): denies a write whose resolved target is
+  outside `INSPIRE_DOCS_DIR_PATH` **or** inside the corpus `<docs>/inspiration/`.
+- `.inspire-intake.lock` (`/inspire` active): denies any write **outside** the
+  corpus — the exact complement.
 
 Paths are fully resolved first, so `../` traversal and symlink escapes can't slip
 past. With no marker (normal development, or any other skill) the hook is inert and
@@ -72,6 +75,12 @@ echo '{"tool_input":{"file_path":"/tmp/proj/src/x.py"}}' \
 rm /tmp/proj/.inspire-apply.lock
 echo '{"tool_input":{"file_path":"/tmp/proj/src/x.py"}}' \
   | CLAUDE_PROJECT_DIR=/tmp/proj python3 inspire/hooks/guard_docs_write.py
+
+# Intake mode: a plain docs write, with /inspire "active" → expect a deny JSON
+touch /tmp/proj/.inspire-intake.lock
+echo '{"tool_input":{"file_path":"/tmp/proj/docs/guide.md"}}' \
+  | CLAUDE_PROJECT_DIR=/tmp/proj python3 inspire/hooks/guard_docs_write.py
+rm /tmp/proj/.inspire-intake.lock
 ```
 
 The domain policy similarly:

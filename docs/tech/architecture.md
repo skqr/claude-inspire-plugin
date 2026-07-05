@@ -5,25 +5,26 @@ contributes artifacts (skills, subagents, MCP servers, hooks) that run *inside a
 host project* when installed. Throughout, "the project" / "this project" means the
 **host repo** the plugin is invoked in, not this repo.
 
-It runs as a two-stage learning loop:
+It runs as a two-stage learning loop, each stage ending in a bounded write path:
 
 ```
-   URLs                                          docs/inspiration/         project docs
-    │                                            (the corpus)              (canon)
-    ▼                                                  │                        ▲
-┌─────────┐   fan out    ┌──────────────┐   write      │         read           │
-│/inspire │ ───────────▶ │  watcher /   │ ──────┐      ▼      ┌────────┐  dispatch│
-│ (intake)│   1 per URL  │  reader      │      ┌┴──────────┐ │/apply  │ ─────────┤
-└─────────┘              │  subagents   │      │ notes +   │ │(promote)│  approved│
-                         └──────┬───────┘      │ index     │ └────┬───┘  edits    │
-                                │ MCP (read)   └───────────┘      │ dispatch      │
-                                ▼                                 ▼               │
-                    ┌────────────────────────┐         ┌───────────────────┐    │
-                    │ inspire-content server │         │ inspire-applier   │────┘
-                    │ get_youtube_transcript │         │ subagent          │  MCP (write)
-                    │ get_webpage_content    │         │   └ write_doc ─────┼─▶ inspire-docs
-                    └────────────────────────┘         └───────────────────┘     server
+Stage 1 — intake
+  URLs ─▶ /inspire ── fan out, 1 per URL ──▶ watcher / reader subagents
+            │                                     │ (read: inspire-content MCP)
+            │ ◀────── finished evaluations ───────┘
+            ▼
+          compose notes + index ── dispatch ─▶ inspire-scribe subagent
+                                                  └ write_note (corpus only) ─▶ docs/inspiration/
+
+Stage 2 — promotion
+  docs/inspiration/ ── read ─▶ /apply ── brief + per-edit approval
+                                 └ dispatch ─▶ inspire-applier subagent
+                                                  └ write_doc (docs dir, never corpus) ─▶ project docs
 ```
+
+`write_note` and `write_doc` both live on the `inspire-docs` MCP server and have
+**complementary** bounds: the first writes only inside the corpus, the second
+never touches it.
 
 ## Repository layout
 
@@ -39,15 +40,16 @@ inspire/
     inspire/SKILL.md                # /inspire — intake orchestrator
     apply/SKILL.md                  # /apply   — promotion editor
   agents/
-    inspire-watcher.md              # reads one YouTube video   (read-only)
+    inspire-watcher.md              # reads one YouTube video    (read-only)
     inspire-reader.md               # reads one web page         (read-only)
+    inspire-scribe.md               # writes composed corpus files (write_note only)
     inspire-applier.md              # writes approved doc edits  (write_doc only)
   mcp/
     server.py                       # inspire-content  (pure read: transcript + page)
-    docs_server.py                  # inspire-docs     (bounded write: write_doc)
+    docs_server.py                  # inspire-docs     (bounded writes: write_doc + write_note)
   hooks/
     hooks.json                      # PreToolUse ×2 + SessionStart
-    guard_docs_write.py             # /apply write backstop
+    guard_docs_write.py             # /inspire + /apply write backstop
     web_fetch_policy.py             # web-fetch domain policy
     check_deps.sh                   # session dependency check
   ruff.toml                         # lint config (py313, line-length 100)
@@ -55,22 +57,28 @@ inspire/
 
 ## Stage 1 — `/inspire` (intake)
 
-1. **Collect & classify.** The skill extracts every URL from the user's message and
+1. **Arm the backstop.** The skill creates a marker file (`.inspire-intake.lock`)
+   that switches the guard hook into intake mode for the run.
+2. **Collect & classify.** The skill extracts every URL from the user's message and
    routes each: YouTube → `inspire-watcher`, any other `http(s)` page →
    `inspire-reader`. Non-`http(s)` URLs are ignored.
-2. **Fan out.** One subagent per URL, dispatched together in a single message so
+3. **Fan out.** One subagent per URL, dispatched together in a single message so
    they run concurrently. Each subagent:
    - calls its one content tool on the `inspire-content` MCP server,
    - reads enough of the host repo (`Read`/`Grep`/`Glob`) to judge relevance,
    - returns a finished markdown evaluation in a **shared output shape** (TL;DR,
      what it's about, what we can learn, directly applicable, skip, caveats, plus a
      relevance score).
-3. **Write the corpus.** The skill — never the subagents — writes one note per
-   source to `docs/inspiration/<slug>.md` and maintains
+4. **Compose the corpus.** The skill — never the read subagents — composes one note
+   per source (`docs/inspiration/<slug>.md`) and the full new
    `docs/inspiration/README.md` (a table + a cross-cutting-themes synthesis).
+5. **Write via subagent.** It dispatches `inspire-scribe` with each file's exact
+   path and complete contents; the scribe writes them byte-faithfully through the
+   corpus-bounded `write_note` tool. The skill itself never calls `Write`/`Edit`.
+6. **Report & release.** It summarizes in chat, then removes the marker.
 
-Because both subagents return the same shape, the skill's note-writing and synthesis
-are source-agnostic; routing is the only YouTube-vs-web branch.
+Because both read subagents return the same shape, the skill's note composition and
+synthesis are source-agnostic; routing is the only YouTube-vs-web branch.
 
 ### `inspire-content` MCP server
 
@@ -100,10 +108,15 @@ return a provenance header + fenced, control-char-stripped, length-capped text:
 
 ### `inspire-docs` MCP server
 
-A second PEP 723 script (`mcp/docs_server.py`). One tool, `write_doc(path, content)`,
-that writes a whole file **only** within `INSPIRE_DOCS_DIR_PATH` (default `./docs`)
-and **never** inside `<docs>/inspiration/` — the check is unconditional, in trusted
-server code. Kept a separate server so `inspire-content` stays strictly pure-read.
+A second PEP 723 script (`mcp/docs_server.py`) holding both bounded write tools —
+each writes a whole file, with the check unconditional, in trusted server code:
+
+- `write_doc(path, content)` — **only** within `INSPIRE_DOCS_DIR_PATH` (default
+  `./docs`) and **never** inside `<docs>/inspiration/` (`/apply`'s tool).
+- `write_note(path, content)` — **only** inside `<docs>/inspiration/`, the exact
+  complement (`/inspire`'s tool).
+
+Kept a separate server so `inspire-content` stays strictly pure-read.
 
 ## The subagents at a glance
 
@@ -111,7 +124,8 @@ server code. Kept a separate server so `inspire-content` stays strictly pure-rea
 | --- | --- | --- | --- |
 | `inspire-watcher` | intake | `get_youtube_transcript`, Read, Grep, Glob | no |
 | `inspire-reader` | intake | `get_webpage_content`, Read, Grep, Glob | no |
-| `inspire-applier` | promotion | `write_doc`, Read, Grep, Glob | only via `write_doc` (docs dir) |
+| `inspire-scribe` | intake | `write_note`, Read, Grep, Glob | only via `write_note` (corpus) |
+| `inspire-applier` | promotion | `write_doc`, Read, Grep, Glob | only via `write_doc` (docs dir, never corpus) |
 
 Each is an *allowlisted subagent over an owned, hardened MCP surface* — the same
 pattern on both the read and write sides. See [security.md](security.md).

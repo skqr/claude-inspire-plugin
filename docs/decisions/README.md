@@ -12,5 +12,6 @@ to change a decision, add a new ADR that supersedes it rather than editing histo
 | [0004](0004-apply-write-boundary.md) | Bound `/apply`'s writes with a path-restricted tool + restricted subagent (primary) and a guard hook (backstop) | Accepted |
 | [0005](0005-operational-hooks.md) | Add a web-fetch domain policy hook and a session dependency-check hook | Accepted |
 | [0006](0006-apply-reconciliation-status.md) | Track `/apply` reconciliation with a read-only `status` flag on the corpus | Accepted |
+| [0007](0007-inspire-write-boundary.md) | Bound `/inspire`'s corpus writes symmetrically: `write_note` + scribe subagent (primary), guard-hook intake mode (backstop) | Accepted |
 
 For the *how* (components, data flow, configuration), see [`../tech/`](../tech/).
